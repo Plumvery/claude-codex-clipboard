@@ -77,9 +77,9 @@ function handleLine(line) {
     if (!NO_NORM) text = normalizeForSpeech(text);
   }
   if (!text.trim()) return;
-  const ok = copyToClipboard(text);
+  const res = copyToClipboard(text);
   log(
-    ok ? "copy:" : "FAIL:",
+    res === "skipped" ? "skip:" : res ? "copy:" : "FAIL:",
     `${text.length}字`,
     text.replace(/\n/g, " ").slice(0, 50) + (text.length > 50 ? "…" : "")
   );

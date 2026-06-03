@@ -59,8 +59,8 @@ function drain() {
       draining = false;
       return;
     }
-    const ok = copyToClipboard(line);
-    log(ok ? "copy:" : "FAIL:", line.length > 60 ? line.slice(0, 60) + "…" : line);
+    const res = copyToClipboard(line);
+    log(res === "skipped" ? "skip:" : res ? "copy:" : "FAIL:", line.length > 60 ? line.slice(0, 60) + "…" : line);
     setTimeout(step, DRAIN_MS);
   };
   step();

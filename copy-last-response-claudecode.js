@@ -151,9 +151,11 @@ function main() {
     process.stderr.write("[copy-last-response] コピー対象のテキストが見つかりませんでした\n");
     process.exit(0); // フックは失敗させずに静かに終了
   }
-  const ok = copyToClipboard(text);
+  const res = copyToClipboard(text);
   process.stderr.write(
-    ok
+    res === "skipped"
+      ? "[copy-last-response] 直近と同一内容のためスキップしました\n"
+      : res
       ? `[copy-last-response] ${text.length} 文字をクリップボードにコピーしました\n`
       : "[copy-last-response] クリップボードへの書き込みに失敗しました\n"
   );
