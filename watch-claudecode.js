@@ -28,10 +28,17 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { copyToClipboard } = require("./clipboard");
+const { copyToClipboard, setClipboardRaw } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
 const NO_NORM = process.env.LRAC_NO_NORMALIZE === "1";
+
+// コピー後リセット: Aqua Voice 等が「前のクリップボードを復元」して直前の値を
+// 再読み上げするのを防ぐため、読み取り猶予(RESET_MS)の後にクリップボードを空へ戻す。
+//   LRAC_RESET_MODE = off(既定) | blank
+//   LRAC_RESET_MS   = 空に戻すまでの猶予(ms)。既定 150。
+const RESET_MODE = process.env.LRAC_RESET_MODE || "off";
+const RESET_MS = parseInt(process.env.LRAC_RESET_MS || "150", 10);
 
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
 const PROJECTS =
@@ -75,8 +82,22 @@ function drain() {
     }
     const res = copyToClipboard(line);
     log(res === "skipped" ? "skip:" : res ? "copy:" : "FAIL:", line.length > 60 ? line.slice(0, 60) + "…" : line);
-    // 重複でスキップした行は読み上げ対象外なので待たない。コピーした行は読了まで待つ。
-    setTimeout(step, res === "skipped" ? 0 : readingDelay(line));
+    if (res === "skipped" || !res) {
+      // 重複/失敗の行は読み上げ対象外なので待たない。
+      setTimeout(step, 0);
+      return;
+    }
+    const hold = readingDelay(line); // この行の読了までの猶予
+    if (RESET_MODE === "blank") {
+      // RESET_MS 後にクリップボードを空へ戻し(再読み上げ防止)、残り時間だけ待ってから次行。
+      const capture = Math.min(RESET_MS, hold);
+      setTimeout(() => {
+        setClipboardRaw(""); // dedup を通さず確実に空へ
+        setTimeout(step, Math.max(0, hold - capture));
+      }, capture);
+    } else {
+      setTimeout(step, hold);
+    }
   };
   step();
 }

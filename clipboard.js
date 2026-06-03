@@ -117,4 +117,4 @@ function copyToClipboard(text, opts) {
   return ok;
 }
 
-module.exports = { copyToClipboard, hashStr, STATE_FILE };
+module.exports = { copyToClipboard, setClipboardRaw, hashStr, STATE_FILE };

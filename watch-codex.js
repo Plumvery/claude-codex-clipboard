@@ -29,7 +29,7 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { copyToClipboard } = require("./clipboard");
+const { copyToClipboard, setClipboardRaw } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
 
@@ -38,6 +38,10 @@ const RAW = process.env.LRAC_RAW === "1";
 const NO_NORM = process.env.LRAC_NO_NORMALIZE === "1";
 const FROM_START = process.env.LRAC_FROM_START === "1";
 const QUIET = process.env.LRAC_QUIET === "1";
+// コピー後リセット(Aqua Voice 等の復元による再読み上げ防止)。off(既定)|blank。
+const RESET_MODE = process.env.LRAC_RESET_MODE || "off";
+const RESET_MS = parseInt(process.env.LRAC_RESET_MS || "150", 10);
+let copySeq = 0; // 最新コピーだけを空に戻すための世代カウンタ
 const SESSIONS =
   process.env.LRAC_CODEX_SESSIONS ||
   path.join(os.homedir(), ".codex", "sessions");
@@ -83,6 +87,13 @@ function handleLine(line) {
     `${text.length}字`,
     text.replace(/\n/g, " ").slice(0, 50) + (text.length > 50 ? "…" : "")
   );
+  // Aqua Voice 等の復元による再読み上げ防止: 読み取り猶予の後にクリップボードを空へ。
+  if (RESET_MODE === "blank" && res === true) {
+    const myseq = ++copySeq;
+    setTimeout(() => {
+      if (myseq === copySeq) setClipboardRaw(""); // 最新コピーのみ空に戻す
+    }, RESET_MS);
+  }
 }
 
 // ---- ファイル監視 ----------------------------------------------------------
