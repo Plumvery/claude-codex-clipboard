@@ -1,0 +1,14 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Logs / temp
+*.log
+_*.out
+_*.err
+test-live.jsonl
+raw-test.jsonl
+
+# OS
+Thumbs.db
+.DS_Store
