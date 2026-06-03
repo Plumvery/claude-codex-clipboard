@@ -62,11 +62,19 @@ powershell -ExecutionPolicy Bypass -File start-watcher-claudecode.ps1
 
 > Stop フックと監視版を**同時に使うと最後に全文で上書き**されます。どちらか一方にしてください。
 
+### 適応ウェイト（中抜け防止）
+
+一行ずつコピーすると、TTS が1行を読み終える前に次の行で上書きされ「中抜け」します。
+そのため**各行を「長さに応じた読み上げ時間」ぶん保持**してから次へ進みます
+（長い行ほど長く待つ）。読み上げが速い/遅い場合は `LRAC_MS_PER_CHAR` で調整します。
+
 ### 監視版の環境変数
 
 | 変数 | 既定 | 説明 |
 |------|------|------|
-| `LRAC_DRAIN_MS` | `250` | 1行送出の最小間隔(ms) |
+| `LRAC_MS_PER_CHAR` | `120` | 1文字あたりの保持時間(ms)。速いTTSなら小さく、中抜けするなら大きく |
+| `LRAC_MIN_WAIT` | `900` | 1行の最小保持時間(ms) |
+| `LRAC_MAX_WAIT` | `15000` | 1行の最大保持時間(ms) |
 | `LRAC_POLL_MS` | `300` | transcript 監視ポーリング間隔(ms) |
 | `LRAC_PROJECTS` | `~/.claude/projects` | transcript 探索ルート |
 | `LRAC_QUIET` | – | `1` でログ抑制 |

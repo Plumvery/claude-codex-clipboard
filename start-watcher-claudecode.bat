@@ -9,8 +9,10 @@ echo  Press Ctrl+C or close this window to stop.
 echo ============================================================
 echo.
 
-REM To change per-line interval (ms), uncomment and edit:
-REM set LRAC_DRAIN_MS=250
+REM Reading pace: ms held per character (bigger = slower, avoids skipping):
+REM set LRAC_MS_PER_CHAR=120
+REM Minimum hold per line (ms):
+REM set LRAC_MIN_WAIT=900
 REM To disable speech normalization, uncomment the next line:
 REM set LRAC_NO_NORMALIZE=1
 

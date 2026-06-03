@@ -16,10 +16,13 @@
  *   node watch-claudecode.js <transcript.jsonl>   # 特定ファイルを監視
  *
  * 環境変数で調整:
- *   LRAC_DRAIN_MS   1行送出の最小間隔(ms)。既定 250。
- *   LRAC_POLL_MS    ファイル監視ポーリング間隔(ms)。既定 300。
- *   LRAC_PROJECTS   transcript 探索ルート。既定 ~/.claude/projects
- *   LRAC_QUIET      "1" でログ抑制。
+ *   LRAC_MS_PER_CHAR  1文字あたりの待ち時間(ms)。既定 120。読み上げが速いTTSなら小さく、
+ *                     中抜けするなら大きく。各行はこの値×文字数だけ保持される。
+ *   LRAC_MIN_WAIT     1行の最小保持時間(ms)。既定 900。
+ *   LRAC_MAX_WAIT     1行の最大保持時間(ms)。既定 15000。
+ *   LRAC_POLL_MS      ファイル監視ポーリング間隔(ms)。既定 300。
+ *   LRAC_PROJECTS     transcript 探索ルート。既定 ~/.claude/projects
+ *   LRAC_QUIET        "1" でログ抑制。
  */
 
 const fs = require("fs");
@@ -30,11 +33,22 @@ const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
 const NO_NORM = process.env.LRAC_NO_NORMALIZE === "1";
 
-const DRAIN_MS = parseInt(process.env.LRAC_DRAIN_MS || "250", 10);
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
 const PROJECTS =
   process.env.LRAC_PROJECTS || path.join(os.homedir(), ".claude", "projects");
 const QUIET = process.env.LRAC_QUIET === "1";
+
+// 適応ウェイト: 各行をコピーした後、その行の長さ(=読み上げ所要時間の推定)ぶん待つ。
+// これで TTS が1行を読み終える前に次の行で上書きされ「中抜け」するのを防ぐ。
+const MS_PER_CHAR = parseInt(process.env.LRAC_MS_PER_CHAR || "120", 10); // 1文字あたりの待ち
+const MIN_WAIT = parseInt(process.env.LRAC_MIN_WAIT || process.env.LRAC_DRAIN_MS || "900", 10); // 下限
+const MAX_WAIT = parseInt(process.env.LRAC_MAX_WAIT || "15000", 10); // 上限
+
+/** その行の読み上げにかかる推定時間(ms) */
+function readingDelay(text) {
+  const d = Math.ceil(text.length * MS_PER_CHAR);
+  return Math.min(MAX_WAIT, Math.max(MIN_WAIT, d));
+}
 
 function log(...a) {
   if (!QUIET) process.stderr.write("[watch] " + a.join(" ") + "\n");
@@ -61,7 +75,8 @@ function drain() {
     }
     const res = copyToClipboard(line);
     log(res === "skipped" ? "skip:" : res ? "copy:" : "FAIL:", line.length > 60 ? line.slice(0, 60) + "…" : line);
-    setTimeout(step, DRAIN_MS);
+    // 重複でスキップした行は読み上げ対象外なので待たない。コピーした行は読了まで待つ。
+    setTimeout(step, res === "skipped" ? 0 : readingDelay(line));
   };
   step();
 }
@@ -182,7 +197,7 @@ function main() {
   } else {
     log("projects root:", PROJECTS);
   }
-  log(`drain=${DRAIN_MS}ms poll=${POLL_MS}ms`);
+  log(`poll=${POLL_MS}ms wait=${MS_PER_CHAR}ms/char [${MIN_WAIT}-${MAX_WAIT}ms]`);
   setInterval(tick, POLL_MS);
   tick();
 }
