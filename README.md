@@ -3,6 +3,9 @@
 Claude Code の応答が**完了した瞬間**に、その応答本文を**まとめてクリップボードへ自動コピー**する。
 読み上げツールへの流し込みなどを想定。
 
+さらに、コピーされたテキストを**そのまま読み上げる**ローカル TTS 連携（AivisSpeech）も同梱しています
+→ [クリップボードを読み上げる（ローカルTTS: AivisSpeech）](#クリップボードを読み上げるローカルtts-aivisspeech)。
+
 ## 現在の構成（推奨・設定済み）
 
 `~/.claude/settings.json` の **Stop フック**で `copy-last-response-claudecode.js` を実行。
@@ -117,6 +120,14 @@ powershell -ExecutionPolicy Bypass -File start-watcher-claudecode.ps1
 - `filter.js` … 除外フィルタ（全スクリプトで共用）。
 - `normalize.js` … 読み上げ正規化（全スクリプトで共用）。
 - `clipboard.js` … OS別クリップボード書き込み（Windows は Base64 経由で UTF-8 を正しく処理）。
+- `speak-clipboard.js` … **クリップボード読み上げ**の常駐本体（監視→チャンク分割→直列で合成・再生）。
+- `tts-aivis.js` … AivisSpeech(ローカル)でテキスト→WAV を合成（VOICEVOX互換 API、依存ゼロ）。
+- `tts-openai.js` … OpenAI(クラウド)でテキスト→WAV を合成（`gpt-4o-mini-tts`、依存ゼロ）。
+- `play-audio.js` … WAV 再生（Windows は `SoundPlayer`、mac/linux もベストエフォート対応）。
+- `start-speak-aivis.bat` … クリップボード読み上げを**ダブルクリック起動**。
+- `start-speak-aivis.ps1` … クリップボード読み上げの起動用（PowerShell）。
+- `start-speak-openai.bat` … OpenAI 版を**ダブルクリック起動**（`LRAC_TTS_ENGINE=openai`）。
+- `start-speak-openai.ps1` … OpenAI 版の起動用（PowerShell）。
 - `start-watcher-claudecode.bat` … Claude Code 監視版を**ダブルクリック起動**。
 - `start-watcher-codex.bat` … Codex 監視版を**ダブルクリック起動**。
 - `start-watcher-claudecode.ps1` … Claude Code 監視版の起動用（PowerShell, UTF-8 BOM付き）。
@@ -185,6 +196,102 @@ Claude監視・Codex監視が同じファイルを共有するため、横断で
 |------|------|------|
 | `LRAC_RESET_MODE` | `off`（.bat では `blank`） | `blank` でコピー後にクリップボードを空へ戻す |
 | `LRAC_RESET_MS` | `150` | コピーから空に戻すまでの猶予(ms)。読み取りが間に合わないなら大きく |
+
+## クリップボードを読み上げる（ローカルTTS: AivisSpeech）
+
+コピーされたテキストを**完全ローカル・無料**で読み上げる常駐プロセス `speak-clipboard.js` を用意しています。
+合成エンジンは **AivisSpeech**（中身は Style-Bert-VITS2 系）。VOICEVOX 互換 API を使いますが、
+音声合成は VOICEVOX とは別方式で、より自然な読み上げになります。
+
+クリップボードの変化を検知 → 改行優先でチャンク分割 → 1つずつ合成して順に再生します
+（再生は直列なので「中抜け」しません）。コピー元は問わないので、手動でコピーした文章も読み上げます。
+
+### 事前準備
+
+1. **AivisSpeech アプリ（エンジン）をインストールして起動**しておく（既定で `http://127.0.0.1:10101` で待受）。
+2. 声（スタイルID）を確認したいときは:
+
+```powershell
+node speak-clipboard.js --speakers   # 利用可能な「スタイルID  話者/スタイル名」を一覧表示
+```
+
+既定の声は `888753760`（Anneli / ノーマル）。別の声にしたいときは一覧の ID を `LRAC_AIVIS_SPEAKER` に設定します。
+
+### 起動
+
+```powershell
+# ダブルクリック起動（推奨）
+start-speak-aivis.bat
+
+# または
+powershell -ExecutionPolicy Bypass -File start-speak-aivis.ps1
+#   node speak-clipboard.js
+```
+
+動作確認だけしたいとき:
+
+```powershell
+node speak-clipboard.js --say "テスト読み上げです"   # 1回だけ合成・再生して終了
+```
+
+> 起動時点でクリップボードにある内容は**読みません**（新しいコピーから読み上げ）。
+> 起動直後にも読みたい場合は `LRAC_TTS_SPEAK_ON_START=1`。
+
+### コピー側との組み合わせ
+
+- **Stop フック（全文ブロブ）** + 本リーダーが最もシンプル。受け取った全文をチャンク分割して順に読み上げます。
+- `watch-claudecode.js`（一行ずつ）と併用も可。各行が別コピーとして届き、リーダーが順に読みます。
+  この場合、コピー側の「適応ウェイト」や「コピー後ブランク化（`LRAC_RESET_MODE=blank`）」は
+  **本リーダーには不要**です（リーダー自身がキューで直列再生し、空クリップボードは自動スキップするため）。
+- 同じ本文の再来（クリップボード復元など）は読み上げ側でも**重複スキップ**します。
+
+### 環境変数
+
+| 変数 | 既定 | 説明 |
+|------|------|------|
+| `LRAC_AIVIS_URL` | `http://127.0.0.1:10101` | AivisSpeech エンジンのベースURL |
+| `LRAC_AIVIS_SPEAKER` | `888753760` | スタイルID（`--speakers` で一覧）。Anneli/ノーマルが既定 |
+| `LRAC_AIVIS_SPEED` | `1.0` | 話速（`speedScale`）。大きいほど速い |
+| `LRAC_AIVIS_PITCH` | – | 音高（`pitchScale`） |
+| `LRAC_AIVIS_VOLUME` | – | 音量（`volumeScale`） |
+| `LRAC_AIVIS_INTONATION` | – | 抑揚/感情の強さ（`intonationScale`） |
+| `LRAC_POLL_MS` | `300` | クリップボード監視間隔(ms) |
+| `LRAC_TTS_MAX_CHARS` | `140` | 1チャンクの目安文字数。超える行は読点で分割 |
+| `LRAC_TTS_INTERRUPT` | 有効 | `0` で割り込み無効（全部キューに積む） |
+| `LRAC_TTS_CUT` | – | `1` で新コピー時に再生中チャンクも即停止（既定は鳴らし切ってから切替） |
+| `LRAC_TTS_SPEAK_ON_START` | – | `1` で起動時点のクリップボードも読み上げ |
+| `LRAC_QUIET` | – | `1` でログ抑制 |
+
+> Windows では追加依存なしで動きます（再生は `System.Media.SoundPlayer`、クリップボード読取は PowerShell 経由）。
+
+### エンジンを OpenAI に切り替える（クラウド）
+
+`LRAC_TTS_ENGINE=openai` にすると、合成先を **OpenAI の音声生成 API**（既定 `gpt-4o-mini-tts`）へ変更できます。
+ローカル不要・高品質で、`instructions` により喋り方も指示可能。クリップボード監視・チャンク分割・割り込みの
+仕組みは AivisSpeech 版と完全に共通です（同じ `speak-clipboard.js`、合成部だけ差し替え）。
+
+事前に APIキー `OPENAI_API_KEY` を設定してください。
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+$env:LRAC_TTS_ENGINE = "openai"
+node speak-clipboard.js --voices                  # 声の一覧
+node speak-clipboard.js --say "OpenAIの声で読み上げます"  # 単発テスト
+node speak-clipboard.js                            # 常駐（start-speak-openai.bat でも可）
+```
+
+| 変数 | 既定 | 説明 |
+|------|------|------|
+| `LRAC_TTS_ENGINE` | `aivis` | `openai` で OpenAI に切替 |
+| `OPENAI_API_KEY` | – | **必須**。OpenAI APIキー |
+| `LRAC_OPENAI_TTS_MODEL` | `gpt-4o-mini-tts` | TTSモデル（他に `tts-1` / `tts-1-hd`） |
+| `LRAC_OPENAI_VOICE` | `alloy` | 声（`--voices` で一覧。alloy/ash/ballad/coral/echo/fable/onyx/nova/sage/shimmer/verse） |
+| `LRAC_OPENAI_INSTRUCTIONS` | – | 喋り方の指示（`gpt-4o-mini-tts` のみ）。例「落ち着いた低めの声で、句読点でしっかり間を取って」 |
+| `LRAC_OPENAI_FORMAT` | `wav` | 音声フォーマット（再生互換のため `wav` 推奨） |
+| `LRAC_OPENAI_SPEED` | – | 話速 0.25–4.0（主に `tts-1` / `tts-1-hd`） |
+
+> 料金の目安: `gpt-4o-mini-tts` は概ね **$0.015/分** 程度。応答読み上げ程度の文字量なら1回あたり数円以内。
+> 長文は「1チャンク = 1 API 呼び出し」なので、呼び出し数やレイテンシが気になる場合は `LRAC_TTS_MAX_CHARS` を大きめに。
 
 ## 制限・注意
 
