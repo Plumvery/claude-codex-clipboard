@@ -95,27 +95,41 @@ let working = false;
 let current = null; // 再生中の { kill }
 let generation = 0; // 割り込み世代。新しいコピーで増やし、合成中だった古い音声を破棄する
 
+// 1チャンク先読み(パイプライン): 現チャンクの再生中に次チャンクを合成しておく。
+// これで2チャンク目以降は合成待ちの無音が入らず連続再生になる。
+// 各 job は { gen, promise } で、promise は { wav } か { err } に解決。
+function startSynthJob() {
+  if (!queue.length) return null;
+  const item = queue.shift();
+  const gen = generation; // この合成を始めた時点の世代
+  return {
+    gen,
+    promise: synthesize(item.text, item.voice ? { voice: item.voice } : undefined)
+      .then((wav) => ({ wav }))
+      .catch((err) => ({ err })),
+  };
+}
+
 async function pump() {
   if (working) return;
   working = true;
-  while (queue.length) {
-    const item = queue.shift();
-    const myGen = generation; // この合成を始めた時点の世代
-    let wav;
-    try {
-      wav = await synthesize(item.text, item.voice ? { voice: item.voice } : undefined);
-    } catch (e) {
+  let job = startSynthJob();
+  while (job) {
+    const res = await job.promise; // 現チャンクの合成完了を待つ(無音は最初のチャンクのみ)
+    const next = startSynthJob();  // 再生開始前に次チャンクの合成を先行開始
+    if (res.err) {
       // エンジン未起動/接続失敗など。少し待って次へ(本文は捨てる)。
-      log("合成失敗:", e.message);
+      log("合成失敗:", res.err.message);
       await sleep(800);
-      continue;
+    } else if (generation === job.gen) {
+      // 合成中に新しいコピーが来ていなければ再生(この再生中に next が合成される)
+      const pb = playWav(res.wav);
+      current = pb;
+      await pb.promise;
+      current = null;
     }
-    // 合成中に新しいコピーが来ていたら、この音声は古いので再生せず破棄する。
-    if (generation !== myGen) continue;
-    const pb = playWav(wav);
-    current = pb;
-    await pb.promise;
-    current = null;
+    // generation が進んでいた場合は古い音声なので破棄(再生しない)
+    job = next;
   }
   working = false;
 }
