@@ -34,6 +34,20 @@ const VOICES = [
   "fable", "onyx", "nova", "sage", "shimmer", "verse",
 ];
 
+const { parsePool, pickFromPool } = require("./thread-voice");
+
+// セッションごとに割り当てる声プール(LRAC_OPENAI_VOICE_POOL で上書き)。
+// 既定は手動/既定声 alloy 以外の、聞き分けやすい6種。
+function voicePool() {
+  const p = parsePool(process.env.LRAC_OPENAI_VOICE_POOL);
+  return p.length ? p : ["ash", "ballad", "coral", "sage", "verse", "onyx"];
+}
+
+// スレッドキー→声。key 無し(手動コピー等)は既定声 VOICE。
+function pickVoice(key) {
+  return pickFromPool(voicePool(), key, VOICE);
+}
+
 function apiKey() {
   const k = process.env.OPENAI_API_KEY;
   if (!k) throw new Error("OPENAI_API_KEY が未設定です");
@@ -137,6 +151,9 @@ module.exports = {
   synthesize,
   health,
   listVoices,
+  pickVoice,
+  voicePool,
+  defaultVoice: VOICE,
   VOICES,
   MODEL,
   VOICE,

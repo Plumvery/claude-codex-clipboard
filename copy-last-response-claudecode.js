@@ -23,6 +23,7 @@ const fs = require("fs");
 const { copyToClipboard } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
+const { keyFromFile, deriveKey, addMarker } = require("./thread-voice");
 
 function readStdin() {
   try {
@@ -101,7 +102,7 @@ function extractFromTranscript(transcriptPath) {
   return null;
 }
 
-/** 渡されたデータがどのモードか判定して応答テキストを返す */
+/** 渡されたデータがどのモードか判定して { text, key } を返す(key=スレッドキー/無しは null) */
 function resolveText() {
   const stdin = readStdin();
 
@@ -111,10 +112,18 @@ function resolveText() {
       const obj = JSON.parse(stdin);
       if (obj.transcript_path) {
         const t = extractFromTranscript(obj.transcript_path);
-        if (t) return t;
+        if (t) {
+          const key = obj.session_id
+            ? deriveKey("cc", obj.session_id)
+            : keyFromFile("cc", obj.transcript_path);
+          return { text: t, key };
+        }
       }
       // Codex 風 JSON が stdin から来た場合も拾う
-      if (obj["last-assistant-message"]) return obj["last-assistant-message"];
+      if (obj["last-assistant-message"]) {
+        const id = obj.session_id || obj.thread_id || obj.conversation_id;
+        return { text: obj["last-assistant-message"], key: id ? deriveKey("cx", id) : null };
+      }
     } catch {
       /* JSON ではなかった -> 素のテキストとして扱う */
     }
@@ -125,22 +134,25 @@ function resolveText() {
   if (arg && arg.trim().startsWith("{")) {
     try {
       const obj = JSON.parse(arg);
-      if (obj["last-assistant-message"]) return obj["last-assistant-message"];
+      if (obj["last-assistant-message"]) {
+        const id = obj.session_id || obj.thread_id || obj.conversation_id;
+        return { text: obj["last-assistant-message"], key: id ? deriveKey("cx", id) : null };
+      }
     } catch {
       /* ignore */
     }
   }
 
-  // モード3: 素のテキスト stdin
+  // モード3: 素のテキスト stdin(手動/パイプ) → スレッド無し(既定声)
   if (stdin.trim().length > 0 && !stdin.trim().startsWith("{")) {
-    return stdin;
+    return { text: stdin, key: null };
   }
 
-  return null;
+  return { text: null, key: null };
 }
 
 function main() {
-  let text = resolveText();
+  let { text, key } = resolveText();
   // 既定はフィルタ適用(読み上げに向かない部分を除外)。LRAC_RAW=1 で完全な全文。
   if (text && process.env.LRAC_RAW !== "1") {
     text = filterTextBlock(text).join("\n");
@@ -151,12 +163,14 @@ function main() {
     process.stderr.write("[copy-last-response] コピー対象のテキストが見つかりませんでした\n");
     process.exit(0); // フックは失敗させずに静かに終了
   }
-  const res = copyToClipboard(text);
+  // スレッドごとに声を変えるためのマーカーを先頭へ(LRAC_THREAD_VOICE=0 で無効)。
+  const out = addMarker(text, key);
+  const res = copyToClipboard(out);
   process.stderr.write(
     res === "skipped"
       ? "[copy-last-response] 直近と同一内容のためスキップしました\n"
       : res
-      ? `[copy-last-response] ${text.length} 文字をクリップボードにコピーしました\n`
+      ? `[copy-last-response] ${text.length} 文字をコピーしました${key ? " (" + key + ")" : ""}\n`
       : "[copy-last-response] クリップボードへの書き込みに失敗しました\n"
   );
   process.exit(0);

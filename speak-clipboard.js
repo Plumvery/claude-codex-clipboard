@@ -68,6 +68,7 @@ const ENGINE = (process.env.LRAC_TTS_ENGINE || "aivis").toLowerCase();
 const engine = ENGINE === "openai" ? require("./tts-openai") : require("./tts-aivis");
 const { synthesize, health } = engine;
 const { playWav } = require("./play-audio");
+const { parseMarker } = require("./thread-voice");
 
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
 const MAX_CHARS = parseInt(process.env.LRAC_TTS_MAX_CHARS || "140", 10);
@@ -121,11 +122,11 @@ async function pump() {
   if (working) return;
   working = true;
   while (queue.length) {
-    const text = queue.shift();
+    const item = queue.shift();
     const myGen = generation; // この合成を始めた時点の世代
     let wav;
     try {
-      wav = await synthesize(text);
+      wav = await synthesize(item.text, item.voice ? { voice: item.voice } : undefined);
     } catch (e) {
       // エンジン未起動/接続失敗など。少し待って次へ(本文は捨てる)。
       log("合成失敗:", e.message);
@@ -142,9 +143,9 @@ async function pump() {
   working = false;
 }
 
-/** クリップボードから受け取った本文を読み上げ対象として投入する。 */
-function speak(text) {
-  const chunks = chunkText(text);
+/** クリップボードから受け取った本文を、指定の声で読み上げ対象として投入する。 */
+function speak(text, voice) {
+  const chunks = chunkText(text).map((c) => ({ text: c, voice }));
   if (!chunks.length) return;
   if (INTERRUPT) {
     generation++; // 新しい発話。合成中の古いチャンクと未再生の残りを無効化する
@@ -183,8 +184,17 @@ function onClipboard(text) {
   }
   if (t === lastText) return; // 同一内容の再来(クリップボード復元など)はスキップ
   lastText = t;
-  log("読み上げ:", t.length > 40 ? t.slice(0, 40) + "…" : t);
-  speak(t);
+  // スレッドマーカーを解析 → セッションごとの声を決定 → マーカーを除去して読み上げ。
+  const { key, text: body } = parseMarker(t);
+  const clean = body.trim();
+  if (!clean) return;
+  const voice = engine.pickVoice ? engine.pickVoice(key) : undefined;
+  log(
+    "読み上げ:",
+    `[${voice || "default"}${key ? " " + key : ""}]`,
+    clean.length > 40 ? clean.slice(0, 40) + "…" : clean
+  );
+  speak(clean, voice);
 }
 
 function startWatcher() {
