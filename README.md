@@ -65,6 +65,24 @@ powershell -ExecutionPolicy Bypass -File start-watcher-claudecode.ps1
 
 > Stop フックと監視版を**同時に使うと最後に全文で上書き**されます。どちらか一方にしてください。
 
+### 同梱リーダーと組み合わせて「応答の途中からどんどん読む」
+
+Stop フック（応答完了時に1回コピー）だと、Claude が考えたりツールを使っている間は無音になります。
+監視版を使うと、**ブロックが書かれるそばからコピー**するので、読み上げ側 `speak-clipboard.js` が
+応答の途中から順次読み、無音が減ります。
+
+セットアップ:
+1. **Stop フックを止める**（`~/.claude/settings.json` の `hooks` を外す）。二重読み防止。
+2. リーダーの `.env` に **`LRAC_TTS_INTERRUPT=0`**（新しいコピーで前を捨てず**キューに溜める**）。
+3. 監視版を起動（`start-stream-claudecode.bat` をダブルクリック、または `node watch-claudecode.js`）。
+   リーダー（`start-speak-openai.bat`）と**両方**起動しておく。
+
+ポイント:
+- 各行は `LRAC_MIN_WAIT`（推奨600〜）ぶん保持され、リーダーのポーリング間隔 `LRAC_POLL_MS`(既定300)より
+  長いので取りこぼしません。コピーを速くしたいときは `LRAC_MS_PER_CHAR` を小さく。
+- `start-stream-claudecode.bat` は**クリップボードを空に戻しません**（リーダーが拾うまで本文を残すため、
+  `LRAC_RESET_MODE=blank` は付けない）。
+
 ### 適応ウェイト（中抜け防止）
 
 一行ずつコピーすると、TTS が1行を読み終える前に次の行で上書きされ「中抜け」します。
