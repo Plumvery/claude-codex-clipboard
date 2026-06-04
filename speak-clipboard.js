@@ -81,12 +81,14 @@ function chunkText(text) {
 let queue = [];
 let working = false;
 let current = null; // 再生中の { kill }
+let generation = 0; // 割り込み世代。新しいコピーで増やし、合成中だった古い音声を破棄する
 
 async function pump() {
   if (working) return;
   working = true;
   while (queue.length) {
     const text = queue.shift();
+    const myGen = generation; // この合成を始めた時点の世代
     let wav;
     try {
       wav = await synthesize(text);
@@ -96,6 +98,8 @@ async function pump() {
       await sleep(800);
       continue;
     }
+    // 合成中に新しいコピーが来ていたら、この音声は古いので再生せず破棄する。
+    if (generation !== myGen) continue;
     const pb = playWav(wav);
     current = pb;
     await pb.promise;
@@ -109,6 +113,7 @@ function speak(text) {
   const chunks = chunkText(text);
   if (!chunks.length) return;
   if (INTERRUPT) {
+    generation++; // 新しい発話。合成中の古いチャンクと未再生の残りを無効化する
     queue = chunks; // 未再生の残りを捨てて新内容へ
     if (CUT && current) current.kill(); // 再生中も止める場合
   } else {
