@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title Clipboard -> OpenAI TTS (read aloud)
+title Clipboard to OpenAI TTS (read aloud)
 echo ============================================================
-echo  Clipboard text  ->  OpenAI TTS (gpt-4o-mini-tts, read aloud)
+echo  Read clipboard aloud with OpenAI TTS (gpt-4o-mini-tts)
 echo  starting...
 echo  Press Ctrl+C or close this window to stop.
 echo ============================================================
