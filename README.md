@@ -122,9 +122,12 @@ powershell -ExecutionPolicy Bypass -File start-watcher-claudecode.ps1
 - `clipboard.js` … OS別クリップボード書き込み（Windows は Base64 経由で UTF-8 を正しく処理）。
 - `speak-clipboard.js` … **クリップボード読み上げ**の常駐本体（監視→チャンク分割→直列で合成・再生）。
 - `tts-aivis.js` … AivisSpeech(ローカル)でテキスト→WAV を合成（VOICEVOX互換 API、依存ゼロ）。
+- `tts-openai.js` … OpenAI(クラウド)でテキスト→WAV を合成（`gpt-4o-mini-tts`、依存ゼロ）。
 - `play-audio.js` … WAV 再生（Windows は `SoundPlayer`、mac/linux もベストエフォート対応）。
 - `start-speak-aivis.bat` … クリップボード読み上げを**ダブルクリック起動**。
 - `start-speak-aivis.ps1` … クリップボード読み上げの起動用（PowerShell）。
+- `start-speak-openai.bat` … OpenAI 版を**ダブルクリック起動**（`LRAC_TTS_ENGINE=openai`）。
+- `start-speak-openai.ps1` … OpenAI 版の起動用（PowerShell）。
 - `start-watcher-claudecode.bat` … Claude Code 監視版を**ダブルクリック起動**。
 - `start-watcher-codex.bat` … Codex 監視版を**ダブルクリック起動**。
 - `start-watcher-claudecode.ps1` … Claude Code 監視版の起動用（PowerShell, UTF-8 BOM付き）。
@@ -260,6 +263,35 @@ node speak-clipboard.js --say "テスト読み上げです"   # 1回だけ合成
 | `LRAC_QUIET` | – | `1` でログ抑制 |
 
 > Windows では追加依存なしで動きます（再生は `System.Media.SoundPlayer`、クリップボード読取は PowerShell 経由）。
+
+### エンジンを OpenAI に切り替える（クラウド）
+
+`LRAC_TTS_ENGINE=openai` にすると、合成先を **OpenAI の音声生成 API**（既定 `gpt-4o-mini-tts`）へ変更できます。
+ローカル不要・高品質で、`instructions` により喋り方も指示可能。クリップボード監視・チャンク分割・割り込みの
+仕組みは AivisSpeech 版と完全に共通です（同じ `speak-clipboard.js`、合成部だけ差し替え）。
+
+事前に APIキー `OPENAI_API_KEY` を設定してください。
+
+```powershell
+$env:OPENAI_API_KEY = "sk-..."
+$env:LRAC_TTS_ENGINE = "openai"
+node speak-clipboard.js --voices                  # 声の一覧
+node speak-clipboard.js --say "OpenAIの声で読み上げます"  # 単発テスト
+node speak-clipboard.js                            # 常駐（start-speak-openai.bat でも可）
+```
+
+| 変数 | 既定 | 説明 |
+|------|------|------|
+| `LRAC_TTS_ENGINE` | `aivis` | `openai` で OpenAI に切替 |
+| `OPENAI_API_KEY` | – | **必須**。OpenAI APIキー |
+| `LRAC_OPENAI_TTS_MODEL` | `gpt-4o-mini-tts` | TTSモデル（他に `tts-1` / `tts-1-hd`） |
+| `LRAC_OPENAI_VOICE` | `alloy` | 声（`--voices` で一覧。alloy/ash/ballad/coral/echo/fable/onyx/nova/sage/shimmer/verse） |
+| `LRAC_OPENAI_INSTRUCTIONS` | – | 喋り方の指示（`gpt-4o-mini-tts` のみ）。例「落ち着いた低めの声で、句読点でしっかり間を取って」 |
+| `LRAC_OPENAI_FORMAT` | `wav` | 音声フォーマット（再生互換のため `wav` 推奨） |
+| `LRAC_OPENAI_SPEED` | – | 話速 0.25–4.0（主に `tts-1` / `tts-1-hd`） |
+
+> 料金の目安: `gpt-4o-mini-tts` は概ね **$0.015/分** 程度。応答読み上げ程度の文字量なら1回あたり数円以内。
+> 長文は「1チャンク = 1 API 呼び出し」なので、呼び出し数やレイテンシが気になる場合は `LRAC_TTS_MAX_CHARS` を大きめに。
 
 ## 制限・注意
 

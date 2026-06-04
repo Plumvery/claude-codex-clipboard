@@ -130,4 +130,30 @@ async function health() {
   return buf.toString("utf8").trim();
 }
 
-module.exports = { synthesize, listSpeakers, health, BASE, SPEAKER };
+/** 選択可能なボイス一覧({id,label})。/speakers を話者×スタイルに展開する。 */
+async function listVoices() {
+  const speakers = await listSpeakers();
+  const out = [];
+  for (const sp of speakers) {
+    for (const st of sp.styles || []) {
+      out.push({ id: st.id, label: `${sp.name} / ${st.name}` });
+    }
+  }
+  return out;
+}
+
+function describe() {
+  return `AivisSpeech ${BASE} speaker=${SPEAKER}`;
+}
+
+module.exports = {
+  name: "AivisSpeech",
+  describe,
+  hint: "AivisSpeech アプリ(エンジン)を起動してください。",
+  synthesize,
+  health,
+  listVoices,
+  listSpeakers,
+  BASE,
+  SPEAKER,
+};

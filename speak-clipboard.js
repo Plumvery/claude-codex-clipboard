@@ -2,7 +2,8 @@
 /**
  * speak-clipboard.js
  *
- * クリップボードを監視し、内容が変わるたびに AivisSpeech(ローカル) で読み上げる常駐プロセス。
+ * クリップボードを監視し、内容が変わるたびに TTS で読み上げる常駐プロセス。
+ * エンジンは AivisSpeech(ローカル) と OpenAI(クラウド) を LRAC_TTS_ENGINE で切替可能。
  * このリポジトリの copy 系(Stop フック / watch-*.js)が整形済みテキストをコピーするので、
  * それを受けて音声化する「クリップボード → TTS」の消費側。コピー元は問わない
  * (手動コピーした文章もそのまま読み上げる)。
@@ -18,10 +19,13 @@
  * 使い方:
  *   node speak-clipboard.js                 # クリップボード監視を開始
  *   node speak-clipboard.js --say "テスト"   # 1回だけ合成・再生して終了(動作確認)
- *   node speak-clipboard.js --speakers      # 利用可能な話者/スタイルID一覧を表示
+ *   node speak-clipboard.js --speakers      # 利用可能なボイス一覧を表示(--voices も可)
  *
- * 環境変数(抜粋。合成系は tts-aivis.js を参照):
- *   LRAC_AIVIS_URL / LRAC_AIVIS_SPEAKER / LRAC_AIVIS_SPEED ...  AivisSpeech 設定
+ * エンジン選択:
+ *   LRAC_TTS_ENGINE        "aivis"(既定・ローカル) | "openai"(クラウド)
+ * 環境変数(抜粋。合成系は tts-aivis.js / tts-openai.js を参照):
+ *   AivisSpeech: LRAC_AIVIS_URL / LRAC_AIVIS_SPEAKER / LRAC_AIVIS_SPEED ...
+ *   OpenAI:      OPENAI_API_KEY / LRAC_OPENAI_VOICE / LRAC_OPENAI_INSTRUCTIONS ...
  *   LRAC_POLL_MS            クリップボード監視間隔(ms)。既定 300。
  *   LRAC_TTS_MAX_CHARS      1チャンクの目安文字数。既定 140。超える行は読点で分割。
  *   LRAC_TTS_INTERRUPT      "0" で割り込み無効(全部キューに積む)。既定 有効。
@@ -32,7 +36,11 @@
 
 const { spawn } = require("child_process");
 const readline = require("readline");
-const { synthesize, listSpeakers, health, BASE, SPEAKER } = require("./tts-aivis");
+// エンジン差し替え: LRAC_TTS_ENGINE=openai でクラウド、既定はローカルの AivisSpeech。
+// 両モジュールは共通インターフェース(synthesize/health/listVoices/describe/name/hint)を実装。
+const ENGINE = (process.env.LRAC_TTS_ENGINE || "aivis").toLowerCase();
+const engine = ENGINE === "openai" ? require("./tts-openai") : require("./tts-aivis");
+const { synthesize, health } = engine;
 const { playWav } = require("./play-audio");
 
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
@@ -183,8 +191,9 @@ function startWatcher() {
 async function cmdSpeakOnce(text) {
   try {
     await health();
-  } catch {
-    log(`AivisSpeech に接続できません(${BASE})。アプリ(エンジン)を起動してください。`);
+  } catch (e) {
+    log(`${engine.name} に接続できません: ${e.message}`);
+    log(engine.hint);
   }
   try {
     const wav = await synthesize(text);
@@ -195,17 +204,15 @@ async function cmdSpeakOnce(text) {
   }
 }
 
-async function cmdListSpeakers() {
+async function cmdListVoices() {
   try {
-    const speakers = await listSpeakers();
-    for (const sp of speakers) {
-      for (const st of sp.styles || []) {
-        process.stdout.write(`${st.id}\t${sp.name} / ${st.name}\n`);
-      }
+    const voices = await engine.listVoices();
+    for (const v of voices) {
+      process.stdout.write(`${v.id}\t${v.label}\n`);
     }
   } catch (e) {
-    log(`話者一覧の取得に失敗(${BASE}): ${e.message}`);
-    log("AivisSpeech(エンジン)が起動しているか確認してください。");
+    log(`ボイス一覧の取得に失敗: ${e.message}`);
+    log(engine.hint);
     process.exitCode = 1;
   }
 }
@@ -215,8 +222,8 @@ async function cmdListSpeakers() {
 async function main() {
   const argv = process.argv.slice(2);
 
-  if (argv[0] === "--speakers" || argv[0] === "--list") {
-    await cmdListSpeakers();
+  if (argv[0] === "--speakers" || argv[0] === "--voices" || argv[0] === "--list") {
+    await cmdListVoices();
     return;
   }
   if (argv[0] === "--say") {
@@ -231,13 +238,14 @@ async function main() {
   }
 
   // 常駐モード
-  log(`AivisSpeech: ${BASE}  speaker=${SPEAKER}`);
+  log(`engine=${engine.name}  ${engine.describe()}`);
   log(`poll=${POLL_MS}ms  chunk<=${MAX_CHARS}  interrupt=${INTERRUPT ? (CUT ? "cut" : "on") : "off"}`);
   try {
     const v = await health();
-    log(`エンジン接続OK (version ${v})`);
-  } catch {
-    log(`注意: 今はエンジンに接続できません(${BASE})。起動すれば自動で読み上げます。`);
+    log(`${engine.name} 接続OK (${v})`);
+  } catch (e) {
+    log(`注意: 今は ${engine.name} に接続できません(${e.message})。`);
+    log(engine.hint);
   }
   log(SPEAK_ON_START ? "起動時のクリップボードも読み上げます。" : "起動時のクリップボードは読みません(新しいコピーから)。");
   log("監視を開始しました。終了は Ctrl+C。");
