@@ -12,3 +12,8 @@ raw-test.jsonl
 # OS
 Thumbs.db
 .DS_Store
+
+# Secrets / local env (.env may hold API keys — never commit it). .env.example is OK.
+.env
+.env.local
+.env.*.local

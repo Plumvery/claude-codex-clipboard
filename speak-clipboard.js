@@ -36,6 +36,32 @@
 
 const { spawn } = require("child_process");
 const readline = require("readline");
+const fs = require("fs");
+const path = require("path");
+
+// .env(任意): スクリプトと同じフォルダの .env から KEY=VALUE を process.env へ読み込む(zero-dep)。
+// 既存の環境変数(setx 等)が優先。Windows の環境変数伝播(既存窓やダブルクリックに反映されない)を
+// 気にせず OPENAI_API_KEY などを確実に渡せる。.env は .gitignore 済み。
+(function loadDotEnv() {
+  try {
+    const txt = fs.readFileSync(path.join(__dirname, ".env"), "utf8");
+    for (const raw of txt.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      let val = line.slice(eq + 1).trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1); // 周囲のクォートを除去
+      }
+      if (!process.env[key]) process.env[key] = val; // 既存値があれば上書きしない
+    }
+  } catch {
+    /* .env が無ければ無視 */
+  }
+})();
+
 // エンジン差し替え: LRAC_TTS_ENGINE=openai でクラウド、既定はローカルの AivisSpeech。
 // 両モジュールは共通インターフェース(synthesize/health/listVoices/describe/name/hint)を実装。
 const ENGINE = (process.env.LRAC_TTS_ENGINE || "aivis").toLowerCase();

@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title Clipboard -> AivisSpeech (read aloud)
+title Clipboard to AivisSpeech (read aloud)
 echo ============================================================
-echo  Clipboard text  ->  AivisSpeech (local TTS, read aloud)
+echo  Read clipboard aloud with AivisSpeech (local TTS)
 echo  starting...
 echo  Press Ctrl+C or close this window to stop.
 echo ============================================================
