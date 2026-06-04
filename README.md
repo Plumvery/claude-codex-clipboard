@@ -270,7 +270,10 @@ node speak-clipboard.js --say "テスト読み上げです"   # 1回だけ合成
 ローカル不要・高品質で、`instructions` により喋り方も指示可能。クリップボード監視・チャンク分割・割り込みの
 仕組みは AivisSpeech 版と完全に共通です（同じ `speak-clipboard.js`、合成部だけ差し替え）。
 
-事前に APIキー `OPENAI_API_KEY` を設定してください。
+事前に APIキー `OPENAI_API_KEY` を設定してください。方法は2通り:
+
+- **`.env`（推奨・確実）**: リポジトリ直下に `.env` を作り、`OPENAI_API_KEY=sk-...`（必要なら `LRAC_TTS_ENGINE=openai` も）を書く（`.env.example` をコピー）。`.env` は gitignore 済みでコミットされず、`setx` の**環境変数伝播の罠（既存の窓やダブルクリック起動に反映されない）**を回避できます。
+- **環境変数**: `setx OPENAI_API_KEY "sk-..."` 後、**新しく開いたターミナル**から起動（既存の窓・ダブルクリックには `setx` 前の古い環境が残り反映されません）。
 
 ```powershell
 $env:OPENAI_API_KEY = "sk-..."
