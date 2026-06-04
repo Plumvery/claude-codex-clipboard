@@ -19,6 +19,7 @@
  * 環境変数 LRAC_RAW=1 で除外せずに完全な全文をコピーする。
  */
 
+require("./load-env"); // .env を読み込む(LRAC_SKIP_ENGLISH 等をコピー側にも適用)
 const fs = require("fs");
 const { copyToClipboard } = require("./clipboard");
 const { filterTextBlock } = require("./filter");

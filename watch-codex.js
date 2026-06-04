@@ -26,6 +26,7 @@
  *   LRAC_QUIET         "1" でログ抑制。
  */
 
+require("./load-env"); // .env を読み込む(LRAC_SKIP_ENGLISH 等をコピー側にも適用)
 const fs = require("fs");
 const path = require("path");
 const os = require("os");

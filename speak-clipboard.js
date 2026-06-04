@@ -31,38 +31,13 @@
  *   LRAC_TTS_INTERRUPT      "0" で割り込み無効(全部キューに積む)。既定 有効。
  *   LRAC_TTS_CUT            "1" で新コピー時に再生中も即停止。既定 無効(現在のチャンクは鳴らし切る)。
  *   LRAC_TTS_SPEAK_ON_START "1" で起動時点のクリップボードも読み上げる。既定 無効(起動時は読まない)。
- *   LRAC_SKIP_ENGLISH      "1" で英語主体の行(日本語がほぼ無く英字主体)を読み上げない。
- *   LRAC_SKIP_ENGLISH_MINLATIN 英語判定の英字下限。既定 12。
  *   LRAC_QUIET             "1" でログ抑制。
+ * (英語スキップ LRAC_SKIP_ENGLISH はコピー側 filter.js で行う。リーダーはクリップボードを素直に全部読む)
  */
 
 const { spawn } = require("child_process");
 const readline = require("readline");
-const fs = require("fs");
-const path = require("path");
-
-// .env(任意): スクリプトと同じフォルダの .env から KEY=VALUE を process.env へ読み込む(zero-dep)。
-// 既存の環境変数(setx 等)が優先。Windows の環境変数伝播(既存窓やダブルクリックに反映されない)を
-// 気にせず OPENAI_API_KEY などを確実に渡せる。.env は .gitignore 済み。
-(function loadDotEnv() {
-  try {
-    const txt = fs.readFileSync(path.join(__dirname, ".env"), "utf8");
-    for (const raw of txt.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const eq = line.indexOf("=");
-      if (eq <= 0) continue;
-      const key = line.slice(0, eq).trim();
-      let val = line.slice(eq + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1); // 周囲のクォートを除去
-      }
-      if (!process.env[key]) process.env[key] = val; // 既存値があれば上書きしない
-    }
-  } catch {
-    /* .env が無ければ無視 */
-  }
-})();
+require("./load-env"); // 同フォルダの .env を process.env へ(コピー側と共通)
 
 // エンジン差し替え: LRAC_TTS_ENGINE=openai でクラウド、既定はローカルの AivisSpeech。
 // 両モジュールは共通インターフェース(synthesize/health/listVoices/describe/name/hint)を実装。
@@ -78,24 +53,12 @@ const INTERRUPT = process.env.LRAC_TTS_INTERRUPT !== "0";
 const CUT = process.env.LRAC_TTS_CUT === "1";
 const SPEAK_ON_START = process.env.LRAC_TTS_SPEAK_ON_START === "1";
 const QUIET = process.env.LRAC_QUIET === "1";
-// 英語(日本語がほぼ無く英字主体)の行を読み上げない。英語の思考/説明を聞き流したい時。
-const SKIP_ENGLISH = process.env.LRAC_SKIP_ENGLISH === "1";
-const SKIP_ENGLISH_MIN = parseInt(process.env.LRAC_SKIP_ENGLISH_MINLATIN || "12", 10);
 
 function log(...a) {
   if (!QUIET) process.stderr.write("[speak] " + a.join(" ") + "\n");
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** 行が「英語主体(日本語がほぼ無く英字が SKIP_ENGLISH_MIN 文字以上)」か。 */
-function isMostlyEnglish(line) {
-  const s = String(line);
-  // ひらがな/カタカナ/漢字
-  const jp = (s.match(/[぀-ヿ㐀-䶿一-鿿]/g) || []).length;
-  const latin = (s.match(/[A-Za-z]/g) || []).length;
-  return jp === 0 && latin >= SKIP_ENGLISH_MIN;
-}
 
 // ---- テキストのチャンク分割 -------------------------------------------------
 // クリップボード本文は改行(\n)区切りの整形済みテキスト(。は既に、に変換済み)。
@@ -107,7 +70,6 @@ function chunkText(text) {
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (SKIP_ENGLISH && isMostlyEnglish(line)) continue; // 英語主体の行は読み上げない
     if (line.length <= target) {
       out.push(line);
       continue;
