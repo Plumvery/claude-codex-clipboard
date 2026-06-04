@@ -31,7 +31,7 @@ const os = require("os");
 const { copyToClipboard, setClipboardRaw } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
-const { keyFromFile, addMarker } = require("./thread-voice");
+const { threadKey, addMarker } = require("./thread-voice");
 const NO_NORM = process.env.LRAC_NO_NORMALIZE === "1";
 
 // コピー後リセット: Aqua Voice 等が「前のクリップボードを復元」して直前の値を
@@ -198,7 +198,7 @@ function tick() {
     const newest = newestTranscript();
     if (newest && newest !== current) {
       current = newest;
-      currentKey = keyFromFile("cc", current);
+      currentKey = threadKey("cc", { file: current });
       if (!offsets.has(current)) {
         // 既存内容はスキップ(末尾から)。これ以降の追記だけ拾う。
         try {
@@ -216,7 +216,7 @@ function tick() {
 function main() {
   if (process.argv[2]) {
     current = path.resolve(process.argv[2]);
-    currentKey = keyFromFile("cc", current);
+    currentKey = threadKey("cc", { file: current });
     offsets.set(current, fs.statSync(current).size); // 末尾から
     log("watching (fixed):", current);
   } else {

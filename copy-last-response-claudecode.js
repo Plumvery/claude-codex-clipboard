@@ -23,7 +23,7 @@ const fs = require("fs");
 const { copyToClipboard } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
-const { keyFromFile, deriveKey, addMarker } = require("./thread-voice");
+const { threadKey, addMarker } = require("./thread-voice");
 
 function readStdin() {
   try {
@@ -113,16 +113,21 @@ function resolveText() {
       if (obj.transcript_path) {
         const t = extractFromTranscript(obj.transcript_path);
         if (t) {
-          const key = obj.session_id
-            ? deriveKey("cc", obj.session_id)
-            : keyFromFile("cc", obj.transcript_path);
+          const key = threadKey("cc", {
+            sessionId: obj.session_id,
+            cwd: obj.cwd,
+            file: obj.transcript_path,
+          });
           return { text: t, key };
         }
       }
       // Codex 風 JSON が stdin から来た場合も拾う
       if (obj["last-assistant-message"]) {
         const id = obj.session_id || obj.thread_id || obj.conversation_id;
-        return { text: obj["last-assistant-message"], key: id ? deriveKey("cx", id) : null };
+        return {
+          text: obj["last-assistant-message"],
+          key: threadKey("cx", { sessionId: id, cwd: obj.cwd }),
+        };
       }
     } catch {
       /* JSON ではなかった -> 素のテキストとして扱う */
@@ -136,7 +141,10 @@ function resolveText() {
       const obj = JSON.parse(arg);
       if (obj["last-assistant-message"]) {
         const id = obj.session_id || obj.thread_id || obj.conversation_id;
-        return { text: obj["last-assistant-message"], key: id ? deriveKey("cx", id) : null };
+        return {
+          text: obj["last-assistant-message"],
+          key: threadKey("cx", { sessionId: id, cwd: obj.cwd }),
+        };
       }
     } catch {
       /* ignore */
