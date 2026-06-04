@@ -32,6 +32,7 @@ const os = require("os");
 const { copyToClipboard, setClipboardRaw } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
+const { keyFromFile, addMarker } = require("./thread-voice");
 
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
 const RAW = process.env.LRAC_RAW === "1";
@@ -81,7 +82,7 @@ function handleLine(line) {
     if (!NO_NORM) text = normalizeForSpeech(text);
   }
   if (!text.trim()) return;
-  const res = copyToClipboard(text);
+  const res = copyToClipboard(addMarker(text, currentKey));
   log(
     res === "skipped" ? "skip:" : res ? "copy:" : "FAIL:",
     `${text.length}字`,
@@ -100,6 +101,7 @@ function handleLine(line) {
 
 const offsets = new Map();
 let current = null;
+let currentKey = null; // 現在のスレッドキー(cx-<session>)。声の出し分けに使う
 
 function listRollouts(dir) {
   const found = [];
@@ -168,6 +170,7 @@ function tick() {
     const newest = newestRollout();
     if (newest && newest !== current) {
       current = newest;
+      currentKey = keyFromFile("cx", current);
       if (!offsets.has(current)) {
         try {
           offsets.set(current, FROM_START ? 0 : fs.statSync(current).size);
@@ -184,6 +187,7 @@ function tick() {
 function main() {
   if (process.argv[2]) {
     current = path.resolve(process.argv[2]);
+    currentKey = keyFromFile("cx", current);
     offsets.set(current, FROM_START ? 0 : fs.statSync(current).size);
     log("watching (fixed):", current);
   } else {

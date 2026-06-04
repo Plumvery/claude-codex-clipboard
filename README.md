@@ -291,10 +291,26 @@ node speak-clipboard.js                            # 常駐（start-speak-openai
 | `LRAC_OPENAI_VOICE` | `alloy` | 声（`--voices` で一覧。alloy/ash/ballad/coral/echo/fable/onyx/nova/sage/shimmer/verse） |
 | `LRAC_OPENAI_INSTRUCTIONS` | – | 喋り方の指示（`gpt-4o-mini-tts` のみ）。例「落ち着いた低めの声で、句読点でしっかり間を取って」 |
 | `LRAC_OPENAI_FORMAT` | `wav` | 音声フォーマット（再生互換のため `wav` 推奨） |
-| `LRAC_OPENAI_SPEED` | – | 話速 0.25–4.0（主に `tts-1` / `tts-1-hd`） |
+| `LRAC_OPENAI_SPEED` | – | 話速 0.25–4.0（`gpt-4o-mini-tts` でも有効） |
 
 > 料金の目安: `gpt-4o-mini-tts` は概ね **$0.015/分** 程度。応答読み上げ程度の文字量なら1回あたり数円以内。
 > 長文は「1チャンク = 1 API 呼び出し」なので、呼び出し数やレイテンシが気になる場合は `LRAC_TTS_MAX_CHARS` を大きめに。
+
+## 会話スレッドごとに声を変える
+
+出力が**どの会話セッション由来か**に応じて、テキスト先頭にマーカー `⟦vk:cc-…⟧` を埋め込み、読み上げ側がそれを見て**セッションごとに別の声**で読みます（同じセッションは常に同じ声＝別の話者が喋っているように聞き分けられる）。マーカーは読み上げ前に除去。マーカーが無いテキスト（手動コピー等）は**既定の声**で読みます。
+
+- **既定で有効。** コピー側で `LRAC_THREAD_VOICE=0` にするとマーカーを付けません（従来動作）。
+- 声は用意したプールから、セッションキーのハッシュで自動割当。
+- `cc-…` は Claude Code セッション、`cx-…` は Codex セッション由来を表します。
+
+| 変数 | 既定 | 説明 |
+|------|------|------|
+| `LRAC_THREAD_VOICE` | 有効 | `0` でマーカー付与を無効（コピー側） |
+| `LRAC_OPENAI_VOICE_POOL` | `ash,ballad,coral,sage,verse,onyx` | セッションに割り当てる OpenAI 声プール（手動コピーは `LRAC_OPENAI_VOICE`＝既定 `alloy`） |
+| `LRAC_AIVIS_SPEAKER_POOL` | （未設定） | セッションに割り当てる AivisSpeech スタイルIDのプール（カンマ区切り。未設定なら全セッション既定話者） |
+
+> マーカーはクリップボード本文の先頭に入るため、**読み上げ以外で貼り付ける用途がある場合**は `⟦vk:…⟧` が見えます。気になる場合は `LRAC_THREAD_VOICE=0` で無効化してください。
 
 ## 制限・注意
 

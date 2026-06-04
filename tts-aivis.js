@@ -80,7 +80,7 @@ function request(method, pathWithQuery, opts) {
  */
 async function synthesize(text, opts) {
   opts = opts || {};
-  const speaker = String(opts.speaker || SPEAKER);
+  const speaker = String(opts.speaker || opts.voice || SPEAKER);
 
   // 1) audio_query: text と speaker はクエリ文字列。body は空。
   const q =
@@ -146,6 +146,19 @@ function describe() {
   return `AivisSpeech ${BASE} speaker=${SPEAKER}`;
 }
 
+const { parsePool, pickFromPool } = require("./thread-voice");
+
+// セッションごとに割り当てるスタイルIDプール(LRAC_AIVIS_SPEAKER_POOL で設定)。
+// 未設定なら空 = 全セッション既定話者(声の出し分けなし)。
+function voicePool() {
+  return parsePool(process.env.LRAC_AIVIS_SPEAKER_POOL);
+}
+
+// スレッドキー→スタイルID。key 無し/プール未設定なら既定話者 SPEAKER。
+function pickVoice(key) {
+  return pickFromPool(voicePool(), key, SPEAKER);
+}
+
 module.exports = {
   name: "AivisSpeech",
   describe,
@@ -154,6 +167,9 @@ module.exports = {
   health,
   listVoices,
   listSpeakers,
+  pickVoice,
+  voicePool,
+  defaultVoice: SPEAKER,
   BASE,
   SPEAKER,
 };
