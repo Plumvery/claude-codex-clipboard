@@ -32,7 +32,7 @@ const os = require("os");
 const { copyToClipboard, setClipboardRaw } = require("./clipboard");
 const { filterTextBlock } = require("./filter");
 const { normalizeForSpeech } = require("./normalize");
-const { keyFromFile, addMarker } = require("./thread-voice");
+const { threadKey, addMarker } = require("./thread-voice");
 
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
 const RAW = process.env.LRAC_RAW === "1";
@@ -170,7 +170,7 @@ function tick() {
     const newest = newestRollout();
     if (newest && newest !== current) {
       current = newest;
-      currentKey = keyFromFile("cx", current);
+      currentKey = threadKey("cx", { file: current });
       if (!offsets.has(current)) {
         try {
           offsets.set(current, FROM_START ? 0 : fs.statSync(current).size);
@@ -187,7 +187,7 @@ function tick() {
 function main() {
   if (process.argv[2]) {
     current = path.resolve(process.argv[2]);
-    currentKey = keyFromFile("cx", current);
+    currentKey = threadKey("cx", { file: current });
     offsets.set(current, FROM_START ? 0 : fs.statSync(current).size);
     log("watching (fixed):", current);
   } else {

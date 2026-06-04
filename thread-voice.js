@@ -38,6 +38,27 @@ function keyFromFile(source, filePath) {
   return deriveKey(source, base);
 }
 
+/**
+ * スレッドキーを決める。LRAC_THREAD_KEY で粒度を切替:
+ *   "project"(既定) … cwd(無ければ transcript の親フォルダ)基準。--resume や再起動・
+ *                      複数セッションでも安定(同じプロジェクト = 同じ声)。
+ *   "session"        … session_id(無ければ transcript ファイル名)基準。セッションごと。
+ * @param {object} info { sessionId, cwd, file }
+ */
+function threadKey(source, info) {
+  info = info || {};
+  const mode = (process.env.LRAC_THREAD_KEY || "project").toLowerCase();
+  if (mode !== "session") {
+    const proj = info.cwd || (info.file ? path.dirname(String(info.file)) : "");
+    if (proj) return `${source}p-${hashKey(proj).toString(36).slice(0, 6)}`;
+    // project 情報が無ければ session へフォールバック
+  }
+  const id =
+    info.sessionId ||
+    (info.file ? path.basename(String(info.file)).replace(/\.[^.]+$/, "") : "");
+  return id ? deriveKey(source, id) : null;
+}
+
 /** テキスト先頭にマーカーを付ける。LRAC_THREAD_VOICE=0 または key 無しなら素通し。 */
 function addMarker(text, key) {
   if (!key || process.env.LRAC_THREAD_VOICE === "0") return text;
@@ -71,6 +92,7 @@ module.exports = {
   hashKey,
   deriveKey,
   keyFromFile,
+  threadKey,
   addMarker,
   parseMarker,
   parsePool,
