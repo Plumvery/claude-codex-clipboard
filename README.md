@@ -217,6 +217,11 @@ Claude監視・Codex監視が同じファイルを共有するため、横断で
 | `LRAC_RESET_MODE` | `off`（.bat では `blank`） | `blank` でコピー後にクリップボードを空へ戻す |
 | `LRAC_RESET_MS` | `150` | コピーから空に戻すまでの猶予(ms)。読み取りが間に合わないなら大きく |
 
+> 上記は**コピー側**（毎回のコピー後に空へ戻す）。ストリーミング運用では毎回空にすると困るので、
+> **読み上げ側で「読み上げ対象が無くなった時だけ空に戻す」** `LRAC_BLANK_WHEN_IDLE=1`（`speak-clipboard.js`）が使えます。
+> 読み上げ中・キューに残りがある間は空にせず、アイドルになってから `LRAC_BLANK_DELAY` 後に空にします。
+> STT（Aqua Voice 等）で「1個前のクリップボードが読まれる」のを防げます。
+
 ## クリップボードを読み上げる（ローカルTTS: AivisSpeech）
 
 コピーされたテキストを**完全ローカル・無料**で読み上げる常駐プロセス `speak-clipboard.js` を用意しています。
@@ -280,6 +285,8 @@ node speak-clipboard.js --say "テスト読み上げです"   # 1回だけ合成
 | `LRAC_TTS_INTERRUPT` | 有効 | `0` で割り込み無効（全部キューに積む） |
 | `LRAC_TTS_CUT` | – | `1` で新コピー時に再生中チャンクも即停止（既定は鳴らし切ってから切替） |
 | `LRAC_TTS_SPEAK_ON_START` | – | `1` で起動時点のクリップボードも読み上げ |
+| `LRAC_BLANK_WHEN_IDLE` | – | `1` で**読み上げ対象が無くなったらクリップボードを空に戻す**（Aqua Voice 等の復元による再読み上げ対策。STT 時に「1個前」が読まれるのを防ぐ） |
+| `LRAC_BLANK_DELAY` | `1000` | アイドル判定から空に戻すまでの猶予(ms)。`LRAC_POLL_MS` より十分大きく |
 | `LRAC_QUIET` | – | `1` でログ抑制 |
 
 > Windows では追加依存なしで動きます（再生は `System.Media.SoundPlayer`、クリップボード読取は PowerShell 経由）。

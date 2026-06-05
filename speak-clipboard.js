@@ -46,6 +46,7 @@ const engine = ENGINE === "openai" ? require("./tts-openai") : require("./tts-ai
 const { synthesize, health } = engine;
 const { playWav } = require("./play-audio");
 const { parseMarker } = require("./thread-voice");
+const { setClipboardRaw } = require("./clipboard");
 
 const POLL_MS = parseInt(process.env.LRAC_POLL_MS || "300", 10);
 const MAX_CHARS = parseInt(process.env.LRAC_TTS_MAX_CHARS || "140", 10);
@@ -53,12 +54,32 @@ const INTERRUPT = process.env.LRAC_TTS_INTERRUPT !== "0";
 const CUT = process.env.LRAC_TTS_CUT === "1";
 const SPEAK_ON_START = process.env.LRAC_TTS_SPEAK_ON_START === "1";
 const QUIET = process.env.LRAC_QUIET === "1";
+// 読み上げ対象が無くなったら(アイドル)クリップボードを空に戻す。Aqua Voice 等が
+// 「直前のクリップボードを復元」して古い内容を再読み上げするのを防ぐ。
+const BLANK_WHEN_IDLE = process.env.LRAC_BLANK_WHEN_IDLE === "1";
+const BLANK_DELAY = parseInt(process.env.LRAC_BLANK_DELAY || "1000", 10);
 
 function log(...a) {
   if (!QUIET) process.stderr.write("[speak] " + a.join(" ") + "\n");
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// アイドル時にクリップボードを空へ戻す(遅延つき。新しい読み上げが来たら取り消し)。
+// 遅延は LRAC_BLANK_DELAY(既定1000ms)。ポーリング間隔より十分長くして取りこぼしを防ぐ。
+let blankTimer = null;
+function scheduleBlank() {
+  if (!BLANK_WHEN_IDLE) return;
+  clearTimeout(blankTimer);
+  blankTimer = setTimeout(() => {
+    setClipboardRaw(""); // 確実に空へ。空は onClipboard 側でスキップされる
+    log("アイドル: クリップボードを空にしました");
+  }, BLANK_DELAY);
+}
+function cancelBlank() {
+  clearTimeout(blankTimer);
+  blankTimer = null;
+}
 
 // ---- テキストのチャンク分割 -------------------------------------------------
 // クリップボード本文は改行(\n)区切りの整形済みテキスト(。は既に、に変換済み)。
@@ -131,11 +152,13 @@ async function pump() {
     // generation が進んでいた場合は古い音声なので破棄(再生しない)
     job = next;
   }
+  scheduleBlank(); // 読み上げ対象が無くなった → 少し待ってクリップボードを空に戻す
   working = false;
 }
 
 /** クリップボードから受け取った本文を、指定の声で読み上げ対象として投入する。 */
 function speak(text, voice) {
+  cancelBlank(); // 新しい読み上げが来たので空白化を取り消す
   const chunks = chunkText(text).map((c) => ({ text: c, voice }));
   if (!chunks.length) return;
   if (INTERRUPT) {
